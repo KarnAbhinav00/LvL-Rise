@@ -35,9 +35,10 @@ class RunViewModel : ViewModel() {
     fun startTracking(context: Context) {
         if (_runState.value.isTracking) return
 
+        val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
         locationClient = DefaultLocationClient(
             context,
-            LocationServices.getFusedLocationProviderClient(context)
+            fusedLocationClient
         )
 
         _runState.value = _runState.value.copy(isTracking = true, error = null)

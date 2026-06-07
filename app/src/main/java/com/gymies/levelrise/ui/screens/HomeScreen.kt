@@ -219,7 +219,7 @@ fun QuestSection(user: User) {
             modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        quests.forEach { quest ->
+        for (quest in quests) {
             QuestItem(quest)
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -252,7 +252,7 @@ fun QuestItem(quest: Quest) {
         Spacer(modifier = Modifier.height(12.dp))
         
         LinearProgressIndicator(
-            progress = { quest.currentValue / quest.targetValue },
+            progress = { (quest.currentValue / quest.targetValue).coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth().height(4.dp),
             color = Color.White,
             trackColor = Color.White.copy(alpha = 0.1f),
