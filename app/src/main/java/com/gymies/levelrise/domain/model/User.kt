@@ -12,6 +12,8 @@ data class User(
     val stats: UserStats,
     val avatarId: String,
     val gold: Long = 0,
+    val gems: Int = 0,
+    val isPremium: Boolean = false,
     val trustScore: Int = 100,
     val joinDate: Long = System.currentTimeMillis()
 )

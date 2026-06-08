@@ -14,9 +14,15 @@ lifecycleViewmodelCompose = "2.10.0"
 playServicesLocation = "21.3.0"
 credentials = "1.6.0"
 googleid = "1.2.0"
-googleServices = "4.4.2"
+firebaseBom = "34.14.0"
+googleServices = "4.4.4"
 
 [libraries]
+firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
+firebase-auth = { group = "com.google.firebase", name = "firebase-auth" }
+firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
+firebase-storage = { group = "com.google.firebase", name = "firebase-storage" }
+firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }

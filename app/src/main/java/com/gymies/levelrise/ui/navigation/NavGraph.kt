@@ -51,5 +51,14 @@ fun SetupNavGraph(navController: NavHostController) {
         composable(route = Screen.Marketplace.route) {
             MarketplaceScreen(navController)
         }
+        composable(route = Screen.HealthTracker.route) {
+            HealthTrackerScreen(navController)
+        }
+        composable(route = Screen.Shop.route) {
+            ShopScreen(navController)
+        }
+        composable(route = Screen.Achievements.route) {
+            AchievementsScreen(navController)
+        }
     }
 }
