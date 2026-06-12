@@ -36,7 +36,7 @@ class AppColors {
   static const Color accentShield = Color(0xFF6F8DFF);
 
   // ── Grid / Login variants ─────────────────────────────
-  static const Color gridLine = Color(0x1A4E8B);
+  static const Color gridLine = Color(0x1A1A4E8B);
   static const Color loginOverlayDark = Color(0xCC0A1A2E);
   static const Color loginCardGlass = Color(0x14FFFFFF);
   static const Color loginCardStroke = Color(0x33FFFFFF);

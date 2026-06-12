@@ -40,6 +40,11 @@ dependencies:
   firebase_auth: ^6.5.2
   cloud_firestore: ^6.5.0
 
+  # Device Hardware & Cache
+  geolocator: ^11.0.0
+  sensors_plus: ^6.0.0
+  shared_preferences: ^2.2.3
+
   # Authentication
   google_sign_in: 6.1.1
 

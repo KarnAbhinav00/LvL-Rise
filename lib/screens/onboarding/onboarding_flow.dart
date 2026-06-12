@@ -147,7 +147,7 @@ class _OnboardingFlowState extends State<OnboardingFlow>
             Positioned.fill(
               child: CustomPaint(
                 painter: _GridPainter(
-                  lineColor: const Color(0x1A4E8B),
+                  lineColor: const Color(0x1A1A4E8B),
                   spacing: 44.0,
                   thickness: 1.1,
                 ),
@@ -734,7 +734,7 @@ class _OnboardingSuccessScreenState extends State<OnboardingSuccessScreen>
             Positioned.fill(
               child: CustomPaint(
                 painter: _GridPainter(
-                  lineColor: const Color(0x1A4E8B),
+                  lineColor: const Color(0x1A1A4E8B),
                   spacing: 44.0,
                   thickness: 1.1,
                 ),
