@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lottie/lottie.dart';
+import 'dart:math' as math;
 import '../../models/user_profile.dart';
 import '../home_screen.dart';
 
@@ -359,37 +359,9 @@ class _OnboardingPageContentState extends State<_OnboardingPageContent>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Animated icon with glowing orb
-              TweenAnimationBuilder(
-                duration: const Duration(milliseconds: 1000),
-                tween: Tween(begin: 0.0, end: 1.0),
-                builder: (context, value, child) {
-                  return Transform.scale(
-                    scale: value,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [
-                            widget.page.color.withValues(alpha: 0.35),
-                            widget.page.color.withValues(alpha: 0.08),
-                            Colors.transparent,
-                          ],
-                          stops: const [0.0, 0.5, 1.0],
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: widget.page.color.withValues(alpha: 0.4),
-                            blurRadius: 40,
-                            spreadRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: _buildLottieAnimation(widget.page.icon, widget.page.color),
-                    ),
-                  );
-                },
+              _AnimatedIconOrb(
+                icon: widget.page.icon,
+                color: widget.page.color,
               ),
 
               const SizedBox(height: 48),
@@ -659,43 +631,185 @@ class _OnboardingPageContentState extends State<_OnboardingPageContent>
     );
   }
 
-  Widget _buildLottieAnimation(IconData icon, Color color) {
-    String lottieUrl = '';
-    if (icon == Icons.person_outline_rounded) {
-      lottieUrl = 'https://lottie.host/17eb6cb6-eb2a-436f-b258-29cf97f62615/F705iWwLwS.json'; // Name
-    } else if (icon == Icons.wc_rounded) {
-      lottieUrl = 'https://lottie.host/802613d9-a78d-4a11-8977-628d098e91e5/q3eZz5x7wQ.json'; // Gender
-    } else if (icon == Icons.cake_rounded) {
-      lottieUrl = 'https://lottie.host/ccbefbd3-61ab-432d-8e43-e62121e7d23f/2mN6PvZ6yH.json'; // Age
-    } else if (icon == Icons.height_rounded) {
-      lottieUrl = 'https://lottie.host/e82fb7e9-6f94-4d80-b2be-5a02e626bc68/iG9V6E1w4R.json'; // Height
-    } else if (icon == Icons.monitor_weight_rounded) {
-      lottieUrl = 'https://lottie.host/d46b7a2d-ec2d-4f10-911f-c689d0b809a4/q1E3e7Wz5D.json'; // Weight
-    } else if (icon == Icons.flag_rounded) {
-      lottieUrl = 'https://lottie.host/6efdfbf7-9f7a-40a2-9bc5-e8d154ee83b0/4mHw2Q8zXQ.json'; // Goals
-    }
 
-    if (lottieUrl.isNotEmpty) {
-      return ClipOval(
-        child: Lottie.network(
-          lottieUrl,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) {
-            return Icon(
-              icon,
-              size: 64,
-              color: color,
-            );
-          },
-        ),
-      );
-    }
+}
 
-    return Icon(
-      icon,
-      size: 64,
-      color: color,
+// Premium animated icon orb — pulsing ring + radial glow + scale-in
+class _AnimatedIconOrb extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+
+  const _AnimatedIconOrb({required this.icon, required this.color});
+
+  @override
+  State<_AnimatedIconOrb> createState() => _AnimatedIconOrbState();
+}
+
+class _AnimatedIconOrbState extends State<_AnimatedIconOrb>
+    with TickerProviderStateMixin {
+  late AnimationController _scaleController;
+  late AnimationController _pulseController;
+  late Animation<double> _scaleAnim;
+  late Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _scaleController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
     );
+    _scaleAnim = Tween(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.elasticOut),
+    );
+    _scaleController.forward();
+
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat(reverse: true);
+    _pulseAnim = Tween(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _scaleController.dispose();
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([_scaleAnim, _pulseAnim]),
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnim.value,
+          child: SizedBox(
+            width: 160,
+            height: 160,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Outer pulsing ring
+                Transform.scale(
+                  scale: _pulseAnim.value,
+                  child: CustomPaint(
+                    size: const Size(160, 160),
+                    painter: _GlowRingPainter(
+                      color: widget.color,
+                      strokeWidth: 2.5,
+                      glowRadius: 12,
+                    ),
+                  ),
+                ),
+
+                // Glowing background orb
+                Container(
+                  width: 130,
+                  height: 130,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        widget.color.withValues(alpha: 0.30),
+                        widget.color.withValues(alpha: 0.10),
+                        Colors.transparent,
+                      ],
+                      stops: const [0.0, 0.6, 1.0],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: widget.color.withValues(alpha: 0.4),
+                        blurRadius: 50,
+                        spreadRadius: 8,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Inner glass circle
+                Container(
+                  width: 110,
+                  height: 110,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: widget.color.withValues(alpha: 0.08),
+                    border: Border.all(
+                      color: widget.color.withValues(alpha: 0.25),
+                      width: 1.5,
+                    ),
+                  ),
+                ),
+
+                // The icon itself
+                Icon(
+                  widget.icon,
+                  size: 56,
+                  color: widget.color,
+                  shadows: [
+                    Shadow(
+                      color: widget.color.withValues(alpha: 0.6),
+                      blurRadius: 20,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Paints a glowing ring with soft outer glow
+class _GlowRingPainter extends CustomPainter {
+  final Color color;
+  final double strokeWidth;
+  final double glowRadius;
+
+  _GlowRingPainter({
+    required this.color,
+    required this.strokeWidth,
+    required this.glowRadius,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.width / 2) - glowRadius;
+
+    // Outer glow
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: 0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = glowRadius * 2
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, glowRadius);
+    canvas.drawCircle(center, radius, glowPaint);
+
+    // Crisp ring
+    final ringPaint = Paint()
+      ..color = color.withValues(alpha: 0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth;
+    canvas.drawCircle(center, radius, ringPaint);
+
+    // Dashed arc accent (top-right quadrant)
+    final arcPaint = Paint()
+      ..color = color.withValues(alpha: 0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth + 1
+      ..strokeCap = StrokeCap.round;
+    final arcRect = Rect.fromCircle(center: center, radius: radius);
+    canvas.drawArc(arcRect, -math.pi / 4, math.pi / 3, false, arcPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GlowRingPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }
 
@@ -825,10 +939,9 @@ class _OnboardingSuccessScreenState extends State<OnboardingSuccessScreen>
                             ),
                           ],
                         ),
-                        child: Lottie.network(
-                          'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) {
+                        child: AnimatedBuilder(
+                          animation: _checkDrawProgress,
+                          builder: (context, child) {
                             return CustomPaint(
                               painter: _CheckmarkPainter(
                                 progress: _checkDrawProgress.value,
