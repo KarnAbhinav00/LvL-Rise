@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
@@ -7,6 +8,39 @@ import 'package:lottie/lottie.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
 
+// ── Glowing Border Painter for Run Screen ──────────────────────────────────
+class _RunGlowBorderPainter extends CustomPainter {
+  final Color color;
+  final double intensity;
+
+  _RunGlowBorderPainter({required this.color, required this.intensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(24),
+    );
+
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: 0.15 * intensity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawRRect(rect, glowPaint);
+
+    final borderPaint = Paint()
+      ..color = color.withValues(alpha: 0.35 * intensity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawRRect(rect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RunGlowBorderPainter oldDelegate) =>
+      oldDelegate.intensity != intensity || oldDelegate.color != color;
+}
+
 class RunTrackerScreen extends StatefulWidget {
   const RunTrackerScreen({super.key});
 
@@ -14,9 +48,12 @@ class RunTrackerScreen extends StatefulWidget {
   State<RunTrackerScreen> createState() => _RunTrackerScreenState();
 }
 
-class _RunTrackerScreenState extends State<RunTrackerScreen> {
+class _RunTrackerScreenState extends State<RunTrackerScreen>
+    with SingleTickerProviderStateMixin {
   final FirestoreService _firestore = FirestoreService();
   final User? _user = FirebaseAuth.instance.currentUser;
+
+  late AnimationController _pulseController;
 
   // Running State variables
   bool _isTracking = false;
@@ -43,10 +80,20 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   Position? _lastPosition;
 
   @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+  }
+
+  @override
   void dispose() {
     _timer?.cancel();
     _positionStream?.cancel();
     _accelStream?.cancel();
+    _pulseController.dispose();
     super.dispose();
   }
 
@@ -82,22 +129,16 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
           _secondsElapsed++;
           
           if (_isSimulationMode) {
-            // Mock run simulation: 1.5m to 2.5m per second (approx 5-9 km/h)
             final double stepDistance = (1.5 + (0.5 * (_secondsElapsed % 3))) / 1000.0;
             _distanceKm += stepDistance;
             
-            // Pace calculation: (minutes / distance)
             final minutesElapsed = _secondsElapsed / 60.0;
             _paceMinPerKm = _distanceKm > 0 ? (minutesElapsed / _distanceKm) : 0.0;
-
-            // Calories burn estimation
             _caloriesBurned = (_distanceKm * 65).round();
 
-            // Mock sensor activity: add normal walking/running swings
             _accelReadings.add(9.8 + (_secondsElapsed % 2));
             if (_accelReadings.length > 50) _accelReadings.removeAt(0);
           } else {
-            // Real GPS calculations
             final minutesElapsed = _secondsElapsed / 60.0;
             _paceMinPerKm = _distanceKm > 0 ? (minutesElapsed / _distanceKm) : 0.0;
             _caloriesBurned = (_distanceKm * 65).round();
@@ -107,7 +148,6 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     });
 
     if (!_isSimulationMode) {
-      // 1. Geolocator permissions & streams
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
@@ -130,9 +170,8 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                 _lastPosition!.longitude,
                 position.latitude,
                 position.longitude,
-              ) / 1000.0; // convert to km
+              ) / 1000.0;
 
-              // Anti-Cheat Speed Check (detect impossible speed, e.g., in a car or teleporting)
               final double timeDeltaSeconds =
                   (position.timestamp.difference(_lastPosition!.timestamp)).inSeconds.toDouble();
 
@@ -143,7 +182,6 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                   _maxSpeedRecorded = currentSpeedKmh;
                 }
 
-                // If running speed > 35 km/h (Bolt is 44km/h max, average runner is 10-15km/h)
                 if (currentSpeedKmh > 35.0) {
                   _flagCheating('Impossible Speed: ${currentSpeedKmh.toStringAsFixed(1)} km/h');
                 }
@@ -156,21 +194,17 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         });
       }
 
-      // 2. Sensors_plus accelerometer listener for physical activity check
       _accelStream = userAccelerometerEventStream().listen((UserAccelerometerEvent event) {
         if (_isPaused) return;
 
-        // Calculate magnitude of acceleration
         final double magnitude = (event.x * event.x + event.y * event.y + event.z * event.z);
         _accelReadings.add(magnitude);
         if (_accelReadings.length > 50) _accelReadings.removeAt(0);
 
-        // Anti-Cheat: check if device is stationary but GPS moves (mock GPS hack)
         if (_distanceKm > 0.05 && _accelReadings.isNotEmpty) {
           final double avgMagnitude =
               _accelReadings.reduce((a, b) => a + b) / _accelReadings.length;
           
-          // A running/walking person always causes accelerometer fluctuation (avg magnitude > 0.5)
           if (avgMagnitude < 0.08 && _secondsElapsed > 15) {
             _flagCheating('No physical movement detected (Mock GPS)');
           }
@@ -199,11 +233,10 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     _positionStream?.cancel();
     _accelStream?.cancel();
 
-    final xpEarned = (_distanceKm * 150).round(); // 150 XP per km
-    final goldEarned = (_distanceKm * 100).round(); // 100 GOLD per km
+    final xpEarned = (_distanceKm * 150).round();
+    final goldEarned = (_distanceKm * 100).round();
 
     if (_distanceKm > 0.1 && _user != null) {
-      // Save workout
       await _firestore.saveWorkout(
         uid: _user.uid,
         type: 'Run',
@@ -213,7 +246,6 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         goldEarned: goldEarned,
       );
 
-      // Trigger potential monster encounter if verified
       if (!_isCheatingDetected && _distanceKm > 0.5) {
         _triggerMonsterEncounter();
       }
@@ -228,86 +260,162 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     }
   }
 
+  String _getMonsterAsset(String element) {
+    switch (element) {
+      case 'Fire':
+        return 'assets/monsters/fire_guardian.png';
+      case 'Water':
+        return 'assets/monsters/ice_guardian.png';
+      case 'Wind':
+        return 'assets/monsters/shadow_guardian.png';
+      case 'Electric':
+        return 'assets/monsters/thunder_guardian.png';
+      case 'Nature':
+        return 'assets/monsters/nature_guardian.png';
+      default:
+        return 'assets/monsters/fire_guardian.png';
+    }
+  }
+
+  Color _getElementColor(String element) {
+    switch (element) {
+      case 'Fire':
+        return Colors.redAccent;
+      case 'Water':
+        return AppColors.secondary;
+      case 'Wind':
+        return Colors.greenAccent;
+      case 'Electric':
+        return Colors.amber;
+      case 'Nature':
+        return const Color(0xFF50C878);
+      default:
+        return Colors.white;
+    }
+  }
+
   void _triggerMonsterEncounter() {
-    // Navigate or show bottom sheet for catching a monster
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) {
-        // Random monster generation
         final elements = ['Fire', 'Water', 'Wind', 'Electric', 'Nature'];
         final element = (elements..shuffle()).first;
         final monsterId = 'mon_${DateTime.now().millisecondsSinceEpoch % 50}';
         final monsterName = '$element Guardian';
+        final elementColor = _getElementColor(element);
+        final monsterAsset = _getMonsterAsset(element);
 
-        return Container(
-          padding: const EdgeInsets.all(28),
-          decoration: const BoxDecoration(
-            color: Color(0xFF0F121F),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(32),
-              topRight: Radius.circular(32),
-            ),
+        return ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(32),
+            topRight: Radius.circular(32),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.catching_pokemon,
-                size: 64,
-                color: AppColors.secondary,
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'MONSTER ENCOUNTER!',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
-                  letterSpacing: 2.0,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: Container(
+              padding: const EdgeInsets.all(28),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF0F121F).withValues(alpha: 0.95),
+                    const Color(0xFF090A12).withValues(alpha: 0.9),
+                  ],
+                ),
+                border: Border.all(
+                  color: elementColor.withValues(alpha: 0.25),
+                  width: 1,
+                ),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(32),
+                  topRight: Radius.circular(32),
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                'A wild $monsterName appeared because of your hard work!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: 28),
-              ElevatedButton.icon(
-                onPressed: () async {
-                  if (_user != null) {
-                    await _firestore.addMonsterToCollection(_user.uid, monsterId);
-                  }
-                  if (!context.mounted) return;
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Caught $monsterName! Added to collection.'),
-                      backgroundColor: const Color(0xFF50C878),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 140,
+                    width: 140,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: elementColor.withValues(alpha: 0.08),
+                      boxShadow: [
+                        BoxShadow(
+                          color: elementColor.withValues(alpha: 0.2),
+                          blurRadius: 20,
+                          spreadRadius: 2,
+                        ),
+                      ],
                     ),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.secondary,
-                  foregroundColor: Colors.black,
-                  minimumSize: const Size(double.infinity, 54),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    padding: const EdgeInsets.all(12),
+                    child: ClipOval(
+                      child: Image.asset(
+                        monsterAsset,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stack) => Icon(
+                          Icons.pets_rounded,
+                          color: elementColor,
+                          size: 64,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.flash_on_rounded),
-                label: const Text(
-                  'CATCH MONSTER (100% Success)',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'MONSTER ENCOUNTER!',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: Colors.white,
+                      letterSpacing: 2.0,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'A wild $monsterName appeared because of your hard work!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  ElevatedButton.icon(
+                    onPressed: () async {
+                      if (_user != null) {
+                        await _firestore.addMonsterToCollection(_user.uid, monsterId);
+                      }
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Caught $monsterName! Added to collection.'),
+                          backgroundColor: const Color(0xFF50C878),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: elementColor,
+                      foregroundColor: Colors.black,
+                      minimumSize: const Size(double.infinity, 54),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    icon: const Icon(Icons.flash_on_rounded, color: Colors.black),
+                    label: const Text(
+                      'CATCH MONSTER (100% Success)',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
+            ),
           ),
         );
       },
@@ -320,7 +428,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             children: [
               // ── Header & Simulation Toggle ──────────────────
@@ -333,6 +441,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                       fontSize: 26,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
+                      letterSpacing: -0.5,
                     ),
                   ),
                   Row(
@@ -360,72 +469,76 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-              // ── Anti-Cheat Status HUD ───────────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-                decoration: BoxDecoration(
-                  color: _isCheatingDetected
-                      ? Colors.red.withValues(alpha: 0.15)
-                      : AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: _isCheatingDetected
-                        ? Colors.redAccent.withValues(alpha: 0.5)
-                        : Colors.white.withValues(alpha: 0.05),
+              // ── Anti-Cheat Status HUD (Glassmorphic) ───────────────────────
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          _isCheatingDetected
+                              ? Colors.red.withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.04),
+                          Colors.white.withValues(alpha: 0.01),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: _isCheatingDetected
+                            ? Colors.redAccent.withValues(alpha: 0.5)
+                            : Colors.white.withValues(alpha: 0.05),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Anti-Cheat Status:',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.6),
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          _verificationStatus,
+                          style: TextStyle(
+                            color: _isCheatingDetected ? Colors.redAccent : AppColors.secondary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Anti-Cheat Status:',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
-                        fontSize: 13,
-                      ),
-                    ),
-                    Text(
-                      _verificationStatus,
-                      style: TextStyle(
-                        color: _isCheatingDetected ? Colors.redAccent : AppColors.secondary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
                 ),
               ),
 
               const Spacer(),
-              // ── Running Lottie Animation Card ────────────
+              // ── Running Lottie Animation Card (Glowing Circular Ring) ─────
               Center(
-                child: Container(
-                  height: 160,
-                  width: 160,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.surface,
-                    border: Border.all(
-                      color: _isTracking
-                          ? (_isPaused ? AppColors.secondary.withValues(alpha: 0.3) : AppColors.primary.withValues(alpha: 0.3))
-                          : Colors.white12,
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: _isTracking
-                            ? (_isPaused ? AppColors.secondary.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
-                            : Colors.transparent,
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                      ),
-                    ],
+                child: CustomPaint(
+                  foregroundPainter: _RunGlowBorderPainter(
+                    color: _isTracking
+                        ? (_isPaused ? AppColors.secondary : AppColors.primary)
+                        : Colors.white24,
+                    intensity: _isTracking ? (0.8 + (_pulseController.value * 0.2)) : 0.5,
                   ),
-                  child: ClipOval(
-                    child: _buildRunningLottie(),
+                  child: Container(
+                    height: 160,
+                    width: 160,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.surface,
+                    ),
+                    child: ClipOval(
+                      child: _buildRunningLottie(),
+                    ),
                   ),
                 ),
               ),
@@ -435,26 +548,27 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
               Text(
                 _formatDuration(_secondsElapsed),
                 style: const TextStyle(
-                  fontSize: 72,
-                  fontWeight: FontWeight.w800,
+                  fontSize: 64,
+                  fontWeight: FontWeight.w900,
                   color: Colors.white,
+                  letterSpacing: -1,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               const Text(
                 'ELAPSED TIME',
                 style: TextStyle(
                   color: AppColors.textMuted,
-                  fontSize: 12,
+                  fontSize: 11,
                   letterSpacing: 1.5,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
 
               const Spacer(),
 
-              // ── Metrics Grid ──────────────────────────────
+              // ── Metrics Grid (Glassmorphic) ──────────────────────────────
               Row(
                 children: [
                   Expanded(
@@ -465,7 +579,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                       color: AppColors.primaryLight,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _MetricTile(
                       label: 'PACE',
@@ -478,7 +592,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Row(
                 children: [
                   Expanded(
@@ -489,7 +603,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                       color: Colors.orangeAccent,
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _MetricTile(
                       label: 'TRUST SCORE',
@@ -508,32 +622,51 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   if (!_isTracking)
-                    ElevatedButton(
-                      onPressed: _startRun,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(200, 60),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 8,
-                        shadowColor: AppColors.primary.withValues(alpha: 0.4),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.play_arrow_rounded, size: 28),
-                          SizedBox(width: 8),
-                          Text(
-                            'START RUN',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.0,
-                            ),
+                    AnimatedBuilder(
+                      animation: _pulseController,
+                      builder: (context, child) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(30),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.2 + (_pulseController.value * 0.15),
+                                ),
+                                blurRadius: 16,
+                                spreadRadius: 1,
+                              ),
+                            ],
                           ),
-                        ],
+                          child: child,
+                        );
+                      },
+                      child: ElevatedButton(
+                        onPressed: _startRun,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(200, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.play_arrow_rounded, size: 28),
+                            SizedBox(width: 8),
+                            Text(
+                              'START RUN',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 1.0,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     )
                   else ...[
@@ -541,19 +674,19 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     GestureDetector(
                       onTap: _pauseResumeRun,
                       child: Container(
-                        width: 70,
-                        height: 70,
+                        width: 64,
+                        height: 64,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: _isPaused ? AppColors.secondary : AppColors.surface,
                           border: Border.all(
                             color: _isPaused ? AppColors.secondary : Colors.white12,
-                            width: 2,
+                            width: 1.5,
                           ),
                         ),
                         child: Icon(
                           _isPaused ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                          size: 32,
+                          size: 28,
                           color: _isPaused ? Colors.black : Colors.white,
                         ),
                       ),
@@ -563,15 +696,15 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     GestureDetector(
                       onTap: _stopRun,
                       child: Container(
-                        width: 70,
-                        height: 70,
+                        width: 64,
+                        height: 64,
                         decoration: const BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.redAccent,
                         ),
                         child: const Icon(
                           Icons.stop_rounded,
-                          size: 32,
+                          size: 28,
                           color: Colors.white,
                         ),
                       ),
@@ -579,7 +712,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                   ],
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 10),
             ],
           ),
         ),
@@ -593,7 +726,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         child: Icon(
           Icons.directions_run_rounded,
           size: 64,
-          color: Colors.white24,
+          color: Colors.white10,
         ),
       );
     }
@@ -628,53 +761,64 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
           }
         });
         return Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F121F),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 120,
-                  child: Lottie.network(
-                    'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
-                    fit: BoxFit.contain,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF0F121F).withValues(alpha: 0.95),
+                      const Color(0xFF1B1D30).withValues(alpha: 0.9),
+                    ],
                   ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'RUN COMPLETED!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    letterSpacing: 1.5,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 120,
+                      child: Lottie.network(
+                        'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'RUN COMPLETED!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Distance: ${distance.toStringAsFixed(2)} km',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '+$xp XP   •   +$gold GOLD',
+                      style: const TextStyle(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Distance: ${distance.toStringAsFixed(2)} km',
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '+$xp XP   •   +$gold GOLD',
-                  style: const TextStyle(
-                    color: AppColors.secondary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
@@ -698,39 +842,50 @@ class _MetricTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: Colors.white.withValues(alpha: 0.04),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.04),
+                Colors.white.withValues(alpha: 0.01),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.05),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: color, size: 22),
+              const SizedBox(height: 10),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 9,
+                  color: AppColors.textMuted,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 12),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              color: AppColors.textMuted,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.8,
-            ),
-          ),
-        ],
       ),
     );
   }

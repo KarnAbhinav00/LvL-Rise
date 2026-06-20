@@ -1,8 +1,44 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:lottie/lottie.dart';
+import 'dart:ui';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
+
+// ── Glowing Border Painter for Workout Cards ───────────────────────────────
+class _WorkoutGlowBorderPainter extends CustomPainter {
+  final Color color;
+  final double intensity;
+
+  _WorkoutGlowBorderPainter({required this.color, required this.intensity});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      const Radius.circular(24),
+    );
+
+    // Glow shadow
+    final glowPaint = Paint()
+      ..color = color.withValues(alpha: 0.15 * intensity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 6
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    canvas.drawRRect(rect, glowPaint);
+
+    // Crisp border
+    final borderPaint = Paint()
+      ..color = color.withValues(alpha: 0.35 * intensity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawRRect(rect, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _WorkoutGlowBorderPainter oldDelegate) =>
+      oldDelegate.intensity != intensity || oldDelegate.color != color;
+}
 
 class WorkoutLoggerScreen extends StatefulWidget {
   const WorkoutLoggerScreen({super.key});
@@ -11,9 +47,12 @@ class WorkoutLoggerScreen extends StatefulWidget {
   State<WorkoutLoggerScreen> createState() => _WorkoutLoggerScreenState();
 }
 
-class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
+class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen>
+    with SingleTickerProviderStateMixin {
   final FirestoreService _firestore = FirestoreService();
   final User? _user = FirebaseAuth.instance.currentUser;
+
+  late AnimationController _pulseController;
 
   // Form selections
   String _selectedExercise = 'Squat';
@@ -47,6 +86,21 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
     'Full Body',
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
   void _addSet() {
     setState(() {
       _sets.add({
@@ -67,7 +121,6 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
   Future<void> _saveWorkout() async {
     if (_user == null) return;
 
-    // Calculate XP and GOLD rewards based on sets, reps, and difficulty
     double totalVolume = 0;
     for (var set in _sets) {
       totalVolume += (set['reps']! * set['weight']!);
@@ -103,7 +156,7 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
       backgroundColor: Colors.transparent,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -113,39 +166,45 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
+                  letterSpacing: -0.5,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // ── Dynamic Exercise Lottie Animation Card ────
+              // ── Dynamic Exercise Lottie Animation Card (Glassmorphic) ──────
               Center(
-                child: Container(
-                  height: 180,
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        blurRadius: 20,
-                        spreadRadius: 2,
-                      ),
-                    ],
+                child: CustomPaint(
+                  foregroundPainter: _WorkoutGlowBorderPainter(
+                    color: AppColors.primary,
+                    intensity: 0.8 + (_pulseController.value * 0.2),
                   ),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
-                    child: _buildWorkoutLottie(_selectedExercise),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Container(
+                        height: 180,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.04),
+                              Colors.white.withValues(alpha: 0.01),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: _buildWorkoutLottie(_selectedExercise),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // ── Dropdowns row ─────────────────────────────
+              // ── Dropdowns row (Glassmorphic) ──────────────────────────────
               Row(
                 children: [
                   Expanded(
@@ -160,7 +219,7 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _buildCardDropdown(
                       label: 'MUSCLE GROUP',
@@ -175,63 +234,75 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 14),
 
-              // ── Duration & Difficulty ─────────────────────
+              // ── Duration & Difficulty (Glassmorphic) ──────────────────────
               Row(
                 children: [
                   Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: AppColors.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'DURATION (MIN)',
-                            style: TextStyle(
-                              color: AppColors.textMuted,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.04),
+                                Colors.white.withValues(alpha: 0.01),
+                              ],
                             ),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              GestureDetector(
-                                onTap: () {
-                                  if (_durationMinutes > 5) {
-                                    setState(() => _durationMinutes -= 5);
-                                  }
-                                },
-                                child: const Icon(Icons.remove_circle_outline, color: Colors.white70),
-                              ),
-                              Text(
-                                '$_durationMinutes',
-                                style: const TextStyle(
-                                  fontSize: 18,
+                              const Text(
+                                'DURATION (MIN)',
+                                style: TextStyle(
+                                  color: AppColors.textMuted,
+                                  fontSize: 10,
                                   fontWeight: FontWeight.bold,
-                                  color: Colors.white,
+                                  letterSpacing: 0.5,
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: () {
-                                  setState(() => _durationMinutes += 5);
-                                },
-                                child: const Icon(Icons.add_circle_outline, color: Colors.white70),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (_durationMinutes > 5) {
+                                        setState(() => _durationMinutes -= 5);
+                                      }
+                                    },
+                                    child: const Icon(Icons.remove_circle_outline, color: AppColors.secondary, size: 20),
+                                  ),
+                                  Text(
+                                    '$_durationMinutes',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() => _durationMinutes += 5);
+                                    },
+                                    child: const Icon(Icons.add_circle_outline, color: AppColors.secondary, size: 20),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(width: 16),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: _buildCardDropdown(
                       label: 'DIFFICULTY',
@@ -246,9 +317,9 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
-              // ── Sets Section ──────────────────────────────
+              // ── Sets Section Header ──────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -268,143 +339,190 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                       style: TextStyle(
                         color: AppColors.secondary,
                         fontWeight: FontWeight.bold,
+                        fontSize: 13,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
 
+              // ── Sets List (Animated/Glassmorphic) ────────────────────────
               ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _sets.length,
                 itemBuilder: (context, index) {
                   final set = _sets[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 14,
-                          backgroundColor: AppColors.primary.withValues(alpha: 0.2),
-                          child: Text(
-                            '${index + 1}',
-                            style: const TextStyle(
-                              color: AppColors.primaryLight,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                  return TweenAnimationBuilder<double>(
+                    key: ValueKey('set_${index}_${_sets.length}'),
+                    tween: Tween(begin: 0.0, end: 1.0),
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOut,
+                    builder: (context, value, child) {
+                      return Transform.scale(
+                        scale: 0.95 + (value * 0.05),
+                        child: Opacity(opacity: value, child: child),
+                      );
+                    },
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.04),
+                                  Colors.white.withValues(alpha: 0.01),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 13,
+                                  backgroundColor: AppColors.primary.withValues(alpha: 0.2),
+                                  child: Text(
+                                    '${index + 1}',
+                                    style: const TextStyle(
+                                      color: AppColors.primaryLight,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                // Reps Input
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'REPS',
+                                        style: TextStyle(color: AppColors.textMuted, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () {
+                                              if (set['reps']! > 1) {
+                                                setState(() => set['reps'] = set['reps']! - 1);
+                                              }
+                                            },
+                                            child: const Icon(Icons.remove_circle_outline_rounded, color: Colors.white60, size: 18),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Text(
+                                              '${set['reps']}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() => set['reps'] = set['reps']! + 1);
+                                            },
+                                            child: const Icon(Icons.add_circle_outline_rounded, color: Colors.white60, size: 18),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Weight Input
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'WEIGHT (KG)',
+                                        style: TextStyle(color: AppColors.textMuted, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          GestureDetector(
+                                            onTap: () {
+                                              if (set['weight']! > 0) {
+                                                setState(() => set['weight'] = set['weight']! - 5);
+                                              }
+                                            },
+                                            child: const Icon(Icons.remove_circle_outline_rounded, color: Colors.white60, size: 18),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                                            child: Text(
+                                              '${set['weight']}',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          GestureDetector(
+                                            onTap: () {
+                                              setState(() => set['weight'] = set['weight']! + 5);
+                                            },
+                                            child: const Icon(Icons.add_circle_outline_rounded, color: Colors.white60, size: 18),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // Delete Button
+                                IconButton(
+                                  onPressed: () => _removeSet(index),
+                                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        // Reps Input
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'REPS',
-                                style: TextStyle(color: AppColors.textMuted, fontSize: 9),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (set['reps']! > 1) {
-                                        setState(() => set['reps'] = set['reps']! - 1);
-                                      }
-                                    },
-                                    child: const Icon(Icons.remove, color: Colors.white54, size: 16),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                                    child: Text(
-                                      '${set['reps']}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() => set['reps'] = set['reps']! + 1);
-                                    },
-                                    child: const Icon(Icons.add, color: Colors.white54, size: 16),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Weight Input
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'WEIGHT (KG)',
-                                style: TextStyle(color: AppColors.textMuted, fontSize: 9),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: () {
-                                      if (set['weight']! > 0) {
-                                        setState(() => set['weight'] = set['weight']! - 5);
-                                      }
-                                    },
-                                    child: const Icon(Icons.remove, color: Colors.white54, size: 16),
-                                  ),
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                                    child: Text(
-                                      '${set['weight']}',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() => set['weight'] = set['weight']! + 5);
-                                    },
-                                    child: const Icon(Icons.add, color: Colors.white54, size: 16),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        // Delete Button
-                        IconButton(
-                          onPressed: () => _removeSet(index),
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                        ),
-                      ],
+                      ),
                     ),
                   );
                 },
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
-              // ── Log Workout Button ────────────────────────
-              SizedBox(
-                width: double.infinity,
-                height: 56,
+              // ── Log Workout Button (Glowing & Gradient) ───────────────────
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Container(
+                    width: double.infinity,
+                    height: 54,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.secondary.withValues(
+                            alpha: 0.2 + (_pulseController.value * 0.15),
+                          ),
+                          blurRadius: 16,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  );
+                },
                 child: ElevatedButton(
                   onPressed: _saveWorkout,
                   style: ElevatedButton.styleFrom(
@@ -413,18 +531,19 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
+                    elevation: 0,
                   ),
                   child: const Text(
                     'LOG WORKOUT',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 15,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 1.0,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -438,44 +557,58 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
     required List<String> items,
     required ValueChanged<String?> onChanged,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textMuted,
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.white.withValues(alpha: 0.04),
+                Colors.white.withValues(alpha: 0.01),
+              ],
             ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           ),
-          DropdownButton<String>(
-            value: value,
-            isExpanded: true,
-            underline: const SizedBox.shrink(),
-            dropdownColor: AppColors.surfaceVariant,
-            iconEnabledColor: Colors.white70,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-            ),
-            items: items.map((item) {
-              return DropdownMenuItem<String>(
-                value: item,
-                child: Text(item),
-              );
-            }).toList(),
-            onChanged: onChanged,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 2),
+              DropdownButton<String>(
+                value: value,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                dropdownColor: AppColors.surfaceVariant,
+                iconEnabledColor: Colors.white70,
+                iconSize: 20,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+                items: items.map((item) {
+                  return DropdownMenuItem<String>(
+                    value: item,
+                    child: Text(item),
+                  );
+                }).toList(),
+                onChanged: onChanged,
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -536,44 +669,55 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
           }
         });
         return Center(
-          child: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 40),
-            padding: const EdgeInsets.all(28),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F121F),
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  height: 120,
-                  child: Lottie.network(
-                    'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
-                    fit: BoxFit.contain,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(28),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                padding: const EdgeInsets.all(28),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      const Color(0xFF0F121F).withValues(alpha: 0.95),
+                      const Color(0xFF1B1D30).withValues(alpha: 0.9),
+                    ],
                   ),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
                 ),
-                const SizedBox(height: 16),
-                const Text(
-                  'WORKOUT LOGGED!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 20,
-                    letterSpacing: 1.5,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      height: 120,
+                      child: Lottie.network(
+                        'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'WORKOUT LOGGED!',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 20,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '+$xp XP   •   +$gold GOLD',
+                      style: const TextStyle(
+                        color: AppColors.secondary,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  '+$xp XP   •   +$gold GOLD',
-                  style: const TextStyle(
-                    color: AppColors.secondary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         );
