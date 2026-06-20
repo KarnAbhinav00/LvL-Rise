@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:lottie/lottie.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
 
@@ -86,14 +87,7 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
     );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Workout Saved! Earned $xpEarned XP & $goldEarned GOLD!',
-          ),
-          backgroundColor: AppColors.primary,
-        ),
-      );
+      _showSuccessOverlay(xpEarned, goldEarned);
       // Reset input
       setState(() {
         _sets.clear();
@@ -119,6 +113,34 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
                   color: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // ── Dynamic Exercise Lottie Animation Card ────
+              Center(
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: _buildWorkoutLottie(_selectedExercise),
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -455,6 +477,107 @@ class _WorkoutLoggerScreenState extends State<WorkoutLoggerScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildWorkoutLottie(String exercise) {
+    String lottieUrl = '';
+    switch (exercise) {
+      case 'Squat':
+        lottieUrl = 'https://lottie.host/cbef1210-911f-4ee6-bb4d-616c2c77d54b/v7jLpE7XvV.json';
+        break;
+      case 'Bench Press':
+      case 'Overhead Press':
+        lottieUrl = 'https://lottie.host/80a08e1d-c8ef-46c5-8461-1e967a3a5f9f/7Q5t7hWn3w.json';
+        break;
+      case 'Deadlift':
+        lottieUrl = 'https://lottie.host/da80f922-263a-4467-bc18-bd83e8fa2989/Lp0F223w1P.json';
+        break;
+      case 'Dumbbell Bicep Curl':
+        lottieUrl = 'https://lottie.host/d46b7a2d-ec2d-4f10-911f-c689d0b809a4/q1E3e7Wz5D.json';
+        break;
+      case 'Push-up':
+      case 'Pull-up':
+      case 'Tricep Dips':
+      default:
+        lottieUrl = 'https://lottie.host/de5183db-1d89-497f-9b16-f365d95ea72b/y26lH1Wwfa.json';
+        break;
+    }
+
+    return Lottie.network(
+      lottieUrl,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.fitness_center_rounded, size: 48, color: AppColors.secondary),
+              SizedBox(height: 8),
+              Text(
+                'Power Up Your Day!',
+                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessOverlay(int xp, int gold) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        Future.delayed(const Duration(milliseconds: 2500), () {
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 40),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F121F),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: AppColors.secondary.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 120,
+                  child: Lottie.network(
+                    'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'WORKOUT LOGGED!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '+$xp XP   •   +$gold GOLD',
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

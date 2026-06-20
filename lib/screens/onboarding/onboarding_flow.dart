@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:lottie/lottie.dart';
 import '../../models/user_profile.dart';
+import '../home_screen.dart';
 
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key});
@@ -384,11 +386,7 @@ class _OnboardingPageContentState extends State<_OnboardingPageContent>
                           ),
                         ],
                       ),
-                      child: Icon(
-                        widget.page.icon,
-                        size: 64,
-                        color: widget.page.color,
-                      ),
+                      child: _buildLottieAnimation(widget.page.icon, widget.page.color),
                     ),
                   );
                 },
@@ -660,6 +658,45 @@ class _OnboardingPageContentState extends State<_OnboardingPageContent>
       suffixIcon: Icon(suffixIcon, color: Colors.white.withValues(alpha: 0.5)),
     );
   }
+
+  Widget _buildLottieAnimation(IconData icon, Color color) {
+    String lottieUrl = '';
+    if (icon == Icons.person_outline_rounded) {
+      lottieUrl = 'https://lottie.host/17eb6cb6-eb2a-436f-b258-29cf97f62615/F705iWwLwS.json'; // Name
+    } else if (icon == Icons.wc_rounded) {
+      lottieUrl = 'https://lottie.host/802613d9-a78d-4a11-8977-628d098e91e5/q3eZz5x7wQ.json'; // Gender
+    } else if (icon == Icons.cake_rounded) {
+      lottieUrl = 'https://lottie.host/ccbefbd3-61ab-432d-8e43-e62121e7d23f/2mN6PvZ6yH.json'; // Age
+    } else if (icon == Icons.height_rounded) {
+      lottieUrl = 'https://lottie.host/e82fb7e9-6f94-4d80-b2be-5a02e626bc68/iG9V6E1w4R.json'; // Height
+    } else if (icon == Icons.monitor_weight_rounded) {
+      lottieUrl = 'https://lottie.host/d46b7a2d-ec2d-4f10-911f-c689d0b809a4/q1E3e7Wz5D.json'; // Weight
+    } else if (icon == Icons.flag_rounded) {
+      lottieUrl = 'https://lottie.host/6efdfbf7-9f7a-40a2-9bc5-e8d154ee83b0/4mHw2Q8zXQ.json'; // Goals
+    }
+
+    if (lottieUrl.isNotEmpty) {
+      return ClipOval(
+        child: Lottie.network(
+          lottieUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            return Icon(
+              icon,
+              size: 64,
+              color: color,
+            );
+          },
+        ),
+      );
+    }
+
+    return Icon(
+      icon,
+      size: 64,
+      color: color,
+    );
+  }
 }
 
 class OnboardingSuccessScreen extends StatefulWidget {
@@ -788,12 +825,18 @@ class _OnboardingSuccessScreenState extends State<OnboardingSuccessScreen>
                             ),
                           ],
                         ),
-                        child: CustomPaint(
-                          painter: _CheckmarkPainter(
-                            progress: _checkDrawProgress.value,
-                            color: const Color(0xFF2AE8A0),
-                          ),
-                          size: const Size(150, 150),
+                        child: Lottie.network(
+                          'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return CustomPaint(
+                              painter: _CheckmarkPainter(
+                                progress: _checkDrawProgress.value,
+                                color: const Color(0xFF2AE8A0),
+                              ),
+                              size: const Size(150, 150),
+                            );
+                          },
                         ),
                       ),
                     ),
@@ -854,7 +897,10 @@ class _OnboardingSuccessScreenState extends State<OnboardingSuccessScreen>
                           height: 56,
                           child: ElevatedButton(
                             onPressed: () {
-                              // Navigate to Home (placeholder)
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                                (route) => false,
+                              );
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.white,

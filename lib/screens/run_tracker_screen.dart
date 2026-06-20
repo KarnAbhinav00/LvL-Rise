@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:lottie/lottie.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_colors.dart';
 
@@ -222,16 +223,9 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       _isTracking = false;
     });
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Run saved! Completed ${_distanceKm.toStringAsFixed(2)} km. Earned $xpEarned XP & $goldEarned GOLD!',
-        ),
-        backgroundColor: AppColors.primary,
-      ),
-    );
+    if (mounted) {
+      _showSuccessOverlay(_distanceKm, xpEarned, goldEarned);
+    }
   }
 
   void _triggerMonsterEncounter() {
@@ -406,6 +400,36 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
               ),
 
               const Spacer(),
+              // ── Running Lottie Animation Card ────────────
+              Center(
+                child: Container(
+                  height: 160,
+                  width: 160,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.surface,
+                    border: Border.all(
+                      color: _isTracking
+                          ? (_isPaused ? AppColors.secondary.withValues(alpha: 0.3) : AppColors.primary.withValues(alpha: 0.3))
+                          : Colors.white12,
+                      width: 1.5,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: _isTracking
+                            ? (_isPaused ? AppColors.secondary.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
+                            : Colors.transparent,
+                        blurRadius: 20,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: _buildRunningLottie(),
+                  ),
+                ),
+              ),
+              const Spacer(),
 
               // ── Primary Timer display ──────────────────────
               Text(
@@ -560,6 +584,101 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRunningLottie() {
+    if (!_isTracking) {
+      return const Center(
+        child: Icon(
+          Icons.directions_run_rounded,
+          size: 64,
+          color: Colors.white24,
+        ),
+      );
+    }
+
+    String url = _isPaused
+        ? 'https://lottie.host/802613d9-a78d-4a11-8977-628d098e91e5/q3eZz5x7wQ.json'
+        : 'https://lottie.host/e6629d89-9eb1-4322-95f2-959c9973273e/o7H1WwVeaF.json';
+
+    return Lottie.network(
+      url,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) {
+        return Center(
+          child: Icon(
+            _isPaused ? Icons.pause_circle_filled_rounded : Icons.directions_run_rounded,
+            size: 64,
+            color: _isPaused ? AppColors.secondary : AppColors.primaryLight,
+          ),
+        );
+      },
+    );
+  }
+
+  void _showSuccessOverlay(double distance, int xp, int gold) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        Future.delayed(const Duration(milliseconds: 3000), () {
+          if (context.mounted) {
+            Navigator.of(context).pop();
+          }
+        });
+        return Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 40),
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F121F),
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  height: 120,
+                  child: Lottie.network(
+                    'https://lottie.host/f7f1837f-5dc9-478b-9442-7cf3f8373b96/T5dZg7j3w3.json',
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'RUN COMPLETED!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 20,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Distance: ${distance.toStringAsFixed(2)} km',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '+$xp XP   •   +$gold GOLD',
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
